@@ -161,12 +161,6 @@ function Get-FileNameFromUrl($url) {
 
 # installer for RubyInstaller based rubies  (vers 2.3 and lower)
 function Install-RI($ruby, $install_path) {
-    # delete if exists
-    if (Test-Path $install_path) {
-        Write-Host "Deleting $($install_path)..." -ForegroundColor Gray
-        Remove-Item $install_path -Force -Recurse
-    }
-
     # create temp directory for all downloads
     $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
     New-Item $tempPath -ItemType Directory | Out-Null
@@ -236,11 +230,6 @@ function Install-RI2($ruby, $install_path) {
         Start-Sleep -s 5
     }
 
-    if(Test-Path $install_path) {
-        Write-Host "Deleting $install_path" -ForegroundColor Gray
-        Remove-Item $install_path -Force -Recurse
-    }
-
     $exePath = "$($env:TEMP)\rubyinstaller.exe"
     $url = $ri2_url + $ruby.download_path
     Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $ri2_url" -ForegroundColor Gray
@@ -250,6 +239,12 @@ function Install-RI2($ruby, $install_path) {
     
     cmd /c start /wait $exePath /verysilent /dir="$install_path" /tasks="noassocfiles,nomodpath,noridkinstall"
     del $exePath
+    
+    # delete html docs
+    if (Test-Path $install_path\share\doc\ruby\html) {
+        Write-Host "Deleting docs at $install_path\share\doc\ruby\html..." -ForegroundColor Gray
+        Remove-Item $install_path\share\doc\ruby\html -Force -Recurse
+    }
 }
 
 function Update-Ruby($ruby, $install_path) {
@@ -304,7 +299,14 @@ function Update-Ruby($ruby, $install_path) {
 foreach ($ruby in $rubies_install) { 
     Write-Host "`n$($dash * 60) Installing $($ruby.version)" -ForegroundColor Cyan
     $install_path = $ruby_pre + $ruby.suffix
-    $env:Path = "$install_path\bin;$no_ruby_path"
+
+    # delete if exists
+    if (Test-Path $install_path) {
+        Write-Host "Deleting $install_path..." -ForegroundColor Gray
+        Remove-Item $install_path -Force -Recurse
+    }
+
+    $env:path = "$install_path\bin;$no_ruby_path"
     if ($ruby.suffix -ge '24') { Install-RI2 -ruby $ruby -install_path $install_path
                         } else { Install-RI  -ruby $ruby -install_path $install_path
     }
@@ -315,7 +317,7 @@ foreach ($ruby in $rubies_install) {
 foreach ($ruby in $rubies_update) { 
     Write-Host "`n$($dash * 60) Updating $($ruby.version)" -ForegroundColor Cyan
     $install_path = $ruby_pre + $ruby.suffix
-    $env:Path = "$install_path\bin;$no_ruby_path"
+    $env:path = "$install_path\bin;$no_ruby_path"
     Update-Ruby -ruby $ruby -install_path $install_path
 }
 
