@@ -248,7 +248,6 @@ function Install-RI2($ruby, $install_path) {
 }
 
 function Update-Ruby($ruby, $install_path) {
-    ruby.exe -e "puts STDOUT.external_encoding"
     $gem_vers = $(gem --version)
     Write-Host Current RubyGems version is $gem_vers
     
@@ -267,7 +266,7 @@ function Update-Ruby($ruby, $install_path) {
       Write-Host "gem update --system" -ForegroundColor Gray
       gem update --system --no-document -q 1> $null
     }
-    Write-Host Done Updating to RubyGems (gem --version)`n -ForegroundColor Gray
+    Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
 
     if ($ruby.install_psych) {
         Write-Host "gem install psych -v 2.2.4 -N" -ForegroundColor Gray
