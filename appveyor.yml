@@ -1,0 +1,5 @@
+build: off
+deploy: off
+
+test_script:
+  - ps: .\scripts\enterprise\install_ruby.ps1

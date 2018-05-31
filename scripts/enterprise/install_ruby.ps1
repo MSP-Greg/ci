@@ -1,92 +1,142 @@
-# download SSL certificates
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-(New-Object Net.WebClient).DownloadFile('http://curl.haxx.se/ca/cacert.pem', "$env:temp\cacert.pem")
-$env:SSL_CERT_FILE = "$env:temp\cacert.pem"
+<#
+Installs, updates, and logs info for ruby versions
 
-$rubies = @(
-    @{
-        "version" = "Ruby 1.9.3-p551"
-        "install_path" = "C:\Ruby193"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-1.9.3-p551-i386-mingw32.7z"
-        "devkit_url" = "http://dl.bintray.com/oneclick/rubyinstaller/DevKit-tdm-32-4.5.2-20111229-1559-sfx.exe"
-        "devkit_paths" = @("C:/Ruby193")
+$rubies_install and $rubies_update variables define versions processed
+
+Updates: RubyGems, bundler, minitest, rake, test-unit
+  
+Initial code by FeodorFitsner and MSP-Greg
+#>
+
+#———————————————————————————————————————————————————————— Install & Version Info
+
+# Path prefix for rubies
+$ruby_pre = 'C:\AV\'
+# make sure it exists - omit at root of drive...
+if( !(Test-Path -Path $ruby_pre) ) { New-Item -Path $ruby_pre -ItemType Directory 1> $null }
+$ruby_pre += 'Ruby'
+
+# url for RubyInstaller  (vers 2.3 and lower)
+$ri_url  = "https://dl.bintray.com/oneclick/rubyinstaller/"
+
+# url for RubyInstaller2 (vers 2.4 and higher)
+$ri2_url = "https://github.com/oneclick/rubyinstaller2/releases/download/"
+
+$r19 = @(
+    @{  "version" = "Ruby 1.9.3-p551"
+        "suffix"  = "193"
+        "download_path" = "ruby-1.9.3-p551-i386-mingw32.7z"
+        "devkit_path"   = "DevKit-tdm-32-4.5.2-20111229-1559-sfx.exe"
+        "devkit_sufs"   = @("193")
         "install_psych" = "true"
     }
-    @{
-        "version" = "Ruby 2.0.0-p648"
-        "install_path" = "C:\Ruby200"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.0.0-p648-i386-mingw32.7z"
+)    
+
+$r20 = @(
+    @{  "version" = "Ruby 2.0.0-p648"
+        "suffix"  = "200"
+        "download_path" = "ruby-2.0.0-p648-i386-mingw32.7z"
         "install_psych" = "true"
     }
-    @{
-        "version" = "Ruby 2.0.0-p648 (x64)"
-        "install_path" = "C:\Ruby200-x64"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.0.0-p648-x64-mingw32.7z"
+    @{  "version" = "Ruby 2.0.0-p648 (x64)"
+        "suffix"  = "200-x64"
+        "download_path" = "ruby-2.0.0-p648-x64-mingw32.7z"
         "install_psych" = "true"
-    }
-    @{
-        "version" = "Ruby 2.2.6"
-        "install_path" = "C:\Ruby22"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.2.6-i386-mingw32.7z"
-    }
-    @{
-        "version" = "Ruby 2.2.6 (x64)"
-        "install_path" = "C:\Ruby22-x64"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.2.6-x64-mingw32.7z"
-    }
-    @{
-        "version" = "Ruby 2.1.9"
-        "install_path" = "C:\Ruby21"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.1.9-i386-mingw32.7z"
-    }
-    @{
-        "version" = "Ruby 2.1.9 (x64)"
-        "install_path" = "C:\Ruby21-x64"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.1.9-x64-mingw32.7z"
-    }
-    @{
-        "version" = "Ruby 2.3.3"
-        "install_path" = "C:\Ruby23"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.3.3-i386-mingw32.7z"
-        "devkit_url" = "http://dl.bintray.com/oneclick/rubyinstaller/DevKit-mingw64-32-4.7.2-20130224-1151-sfx.exe"
-        "devkit_paths" = @("C:/Ruby200", "C:/Ruby21", "C:/Ruby22", "C:/Ruby23")
-    }
-    @{
-        "version" = "Ruby 2.3.3 (x64)"
-        "install_path" = "C:\Ruby23-x64"
-        "download_url" = "http://dl.bintray.com/oneclick/rubyinstaller/ruby-2.3.3-x64-mingw32.7z"
-        "devkit_url" = "http://dl.bintray.com/oneclick/rubyinstaller/DevKit-mingw64-64-4.7.2-20130224-1432-sfx.exe"
-        "devkit_paths" = @("C:/Ruby200-x64", "C:/Ruby21-x64", "C:/Ruby22-x64", "C:/Ruby23-x64")
-    }
-    @{
-        "version" = "Ruby 2.4.4-1"
-        "install_path" = "C:\Ruby24"
-        "download_url" = "https://github.com/oneclick/rubyinstaller2/releases/download/rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x86.exe"
-        "devkit_url" = ""
-        "devkit_paths" = @()
-    }
-    @{
-        "version" = "Ruby 2.4.4-1 (x64)"
-        "install_path" = "C:\Ruby24-x64"
-        "download_url" = "https://github.com/oneclick/rubyinstaller2/releases/download/rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x64.exe"
-        "devkit_url" = ""
-        "devkit_paths" = @()
-    }
-    @{
-        "version" = "Ruby 2.5.1-1"
-        "install_path" = "C:\Ruby25"
-        "download_url" = "https://github.com/oneclick/rubyinstaller2/releases/download/rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x86.exe"
-        "devkit_url" = ""
-        "devkit_paths" = @()
-    }
-    @{
-        "version" = "Ruby 2.5.1-1 (x64)"
-        "install_path" = "C:\Ruby25-x64"
-        "download_url" = "https://github.com/oneclick/rubyinstaller2/releases/download/rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x64.exe"
-        "devkit_url" = ""
-        "devkit_paths" = @()
     }
 )
+
+$r21 = @(
+    @{  "version" = "Ruby 2.1.9"
+        "suffix"  = "21"
+        "download_path" = "ruby-2.1.9-i386-mingw32.7z"
+    }
+    @{  "version" = "Ruby 2.1.9 (x64)"
+        "suffix"  = "21-x64"
+        "download_path" = "ruby-2.1.9-x64-mingw32.7z"
+    }
+)
+
+$r22 = @(
+    @{
+        "version" = "Ruby 2.2.6"
+        "suffix"  = "22"
+        "download_path" = "ruby-2.2.6-i386-mingw32.7z"
+    }
+    @{  "version" = "Ruby 2.2.6 (x64)"
+        "suffix"  = "22-x64"
+        "download_path" = "ruby-2.2.6-x64-mingw32.7z"
+    }
+)
+
+$r23 = @(
+    @{  "version" = "Ruby 2.3.3"
+        "suffix"  = "23"
+        "download_path" = "ruby-2.3.3-i386-mingw32.7z"
+        "devkit_path"   = "DevKit-mingw64-32-4.7.2-20130224-1151-sfx.exe"
+        "devkit_sufs"   = @('200', '21', '22', '23')
+    }
+    @{  "version" = "Ruby 2.3.3 (x64)"
+        "suffix"  = "23-x64"
+        "download_path" = "ruby-2.3.3-x64-mingw32.7z"
+        "devkit_path"   = "DevKit-mingw64-64-4.7.2-20130224-1432-sfx.exe"
+        "devkit_sufs"   = @('200-x64', '21-x64', '22-x64', '23-x64')
+    }
+)
+
+$r24 = @(
+    @{  "version"  = "Ruby 2.4.4-1"
+        "suffix" = "24"
+        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x86.exe"
+        "devkit_file" = ""
+        "devkit_sufs" = @()
+    }
+    @{  "version" = "Ruby 2.4.4-1 (x64)"
+        "suffix"  = "24-x64"
+        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x64.exe"
+        "devkit_file"   = ""
+        "devkit_sufs"   = @()
+    }
+)
+
+$r25 = @(
+    @{  "version" = "Ruby 2.5.1-1"
+        "suffix"  = "25"
+        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x86.exe"
+        "devkit_file"   = ""
+        "devkit_sufs"   = @()
+    }
+    @{  "version" = "Ruby 2.5.1-1 (x64)"
+        "suffix"  = "25-x64"
+        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x64.exe"
+        "devkit_file"   = ""
+        "devkit_sufs"   = @()
+    }
+)
+
+$rubies_install = $r19 + $r20 + $r21 + $r22 + $r23 + $r24 + $r25
+$rubies_update  = $r19 + $r20 + $r21 + $r22 + $r23 + $r24 + $r25
+
+#———————————————————————————————————————————————————————————————————————————————
+
+# dash character
+$dash = "$([char]0x2015)"
+
+if ($env:SSL_CERT_FILE) {
+  $SSL_CERT_FILE_EXISTS = $true
+  $SSL_CERT_FILE = $env:SSL_CERT_FILE
+} else {
+  $SSL_CERT_FILE_EXISTS = $false
+}
+
+# download SSL certificates
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+(New-Object Net.WebClient).DownloadFile('https://curl.haxx.se/ca/cacert.pem', "$env:temp\cacert.pem")
+$env:SSL_CERT_FILE = "$env:temp\cacert.pem"
+
+# reset at finish
+$orig_path = $env:path
+# hopefully, a ruby free path
+$no_ruby_path = $env:path -ireplace "[^;]+?ruby[^;]+?bin;", ''
 
 function GetUninstallString($productName) {
     $x64items = @(Get-ChildItem "HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
@@ -109,193 +159,181 @@ function Get-FileNameFromUrl($url) {
     return $fileName
 }
 
-function Install-Ruby($ruby) {
-    Write-Host "Installing $($ruby.version)" -ForegroundColor Cyan
-
-    if($ruby.download_url.contains('github.com')) {
-        #########################
-        ##
-        ##  New 2.4 installer
-        ##
-        #########################
-
-        # uninstall existing
-        $rubyUninstallPath = "$ruby.install_path\unins000.exe"
-        if([IO.File]::Exists($rubyUninstallPath)) {
-            Write-Host "  Uninstalling previous Ruby 2.4..." -ForegroundColor Gray
-            "`"$rubyUninstallPath`" /silent" | out-file "$env:temp\uninstall-ruby.cmd" -Encoding ASCII
-            & "$env:temp\uninstall-ruby.cmd"
-            del "$env:temp\uninstall-ruby.cmd"
-            Start-Sleep -s 5
-        }
-
-        if(Test-Path $ruby.install_path) {
-            Write-Host "  Deleting $($ruby.install_path)" -ForegroundColor Gray
-            Remove-Item $ruby.install_path -Force -Recurse
-        }
-
-        $exePath = "$($env:TEMP)\rubyinstaller.exe"
-
-        Write-Host "  Downloading $($ruby.version) from $($ruby.download_url)" -ForegroundColor Gray
-        (New-Object Net.WebClient).DownloadFile($ruby.download_url, $exePath)
-
-        Write-Host "Installing..." -ForegroundColor Gray
-        cmd /c start /wait $exePath /verysilent /dir="$($ruby.install_path.replace('\', '/'))" /tasks="noassocfiles,nomodpath,noridkinstall"
-        del $exePath
-        Write-Host "Installed" -ForegroundColor Green
-
-        # setup Ruby
-        $env:Path = "$($ruby.install_path)\bin;$($env:Path)"
-        Write-Host "ruby --version" -ForegroundColor Gray
-        cmd /c ruby --version
-
-        Write-Host "gem --version" -ForegroundColor Gray
-        cmd /c gem --version
-
-        # list installed gems
-        Write-Host "gem list --local" -ForegroundColor Gray
-        cmd /c gem list --local
-
-    } else {
-        #########################
-        ##
-        ##  Old installer
-        ##
-        #########################
-
-        # delete if exists
-        if(Test-Path $ruby.install_path) {
-            Write-Host "  Deleting $($ruby.install_path)" -ForegroundColor Gray
-            Remove-Item $ruby.install_path -Force -Recurse
-        }
-
-        # create temp directory for all downloads
-        $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
-        New-Item $tempPath -ItemType Directory | Out-Null
-
-        $distFileName = Get-FileNameFromUrl $ruby.download_url
-        $distName = [IO.Path]::GetFileNameWithoutExtension($distFileName)
-        $distLocalFileName = (Join-Path $tempPath $distFileName)
-
-        # download archive to a temp
-        Write-Host "  Downloading $($ruby.version) from $($ruby.download_url)" -ForegroundColor Gray
-        (New-Object Net.WebClient).DownloadFile($ruby.download_url, $distLocalFileName)
-
-        # extract archive to C:\
-        Write-Host "  Extracting Ruby files..." -ForegroundColor Gray
-        cmd /c 7z x $distLocalFileName -o"C:\" | Out-Null
-
-        # rename
-        Rename-Item "C:\$distName" $ruby.install_path
-
-        # setup Ruby
-        $env:Path = "$($ruby.install_path)\bin;$($env:Path)"
-        Write-Host "ruby --version" -ForegroundColor Gray
-        cmd /c ruby --version
-
-        Write-Host "gem --version" -ForegroundColor Gray
-        cmd /c gem --version
-
-        # list installed gems
-        Write-Host "gem list --local" -ForegroundColor Gray
-        cmd /c gem list --local
-
-        # download DevKit
-        if($ruby.devkit_url) {
-            Write-Host "  Downloading DevKit from $($ruby.devkit_url)" -ForegroundColor Gray
-            $devKitFileName = Get-FileNameFromUrl $ruby.devkit_url
-            $devKitLocalFileName = (Join-Path $tempPath $devKitFileName)
-            (New-Object Net.WebClient).DownloadFile($ruby.devkit_url, $devKitLocalFileName)
-
-            # extract DevKit
-            $devKitPath = (Join-Path $ruby.install_path 'DevKit')
-            Write-Host "  Extracting DevKit to $devKitPath..." -ForegroundColor Gray
-            cmd /c 7z x $devKitLocalFileName -o"$devKitPath" | Out-Null
-
-            # create config.yml
-            $configYamlPath = (Join-Path $devKitPath 'config.yml')
-            New-Item $configYamlPath -ItemType File | Out-Null
-            Add-Content $configYamlPath "---`n"
-            for($i = 0; $i -lt $ruby.devkit_paths.Count; $i++) {
-                Add-Content $configYamlPath "- $($ruby.devkit_paths[$i])`n"
-            }
-
-            # install DevKit
-            Write-Host "  Installing DevKit..." -ForegroundColor Gray
-            $origPath = (pwd).Path
-            cd $devKitPath
-            cmd /c ruby dk.rb install
-            cd $origPath
-        }
+# installer for RubyInstaller based rubies  (vers 2.3 and lower)
+function Install-RI($ruby, $install_path) {
+    # delete if exists
+    if (Test-Path $install_path) {
+        Write-Host "Deleting $($install_path)..." -ForegroundColor Gray
+        Remove-Item $install_path -Force -Recurse
     }
 
+    # create temp directory for all downloads
+    $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+    New-Item $tempPath -ItemType Directory | Out-Null
+
+    $url = $ri_url + $ruby.download_path
+    $distFileName = Get-FileNameFromUrl $url
+    $distName = [IO.Path]::GetFileNameWithoutExtension($distFileName)
+    $distLocalFileName = (Join-Path $tempPath $distFileName)
+
+    # download archive to a temp
+    Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $ri_url" -ForegroundColor Gray
+    (New-Object Net.WebClient).DownloadFile($url, $distLocalFileName)
+
+    # extract archive to C:\
+    Write-Host "Extracting Ruby files..." -ForegroundColor Gray
+    7z.exe x $distLocalFileName -y -oC:\ | Out-Null
+
+    # move
+    Move-Item -Path "C:\$distName" -Destination $install_path
+
+    # download DevKit
+    if ($ruby.devkit_path) {
+        $url = $ri_url + $ruby.devkit_path
+        Write-Host "Downloading DevKit ($($ruby.devkit_path)) from`n            $ri_url" -ForegroundColor Gray
+        $devKitFileName = Get-FileNameFromUrl $url
+        $devKitLocalFileName = (Join-Path $tempPath $devKitFileName)
+        (New-Object Net.WebClient).DownloadFile($url, $devKitLocalFileName)
+
+        # extract DevKit
+        $devKitPath = (Join-Path $install_path 'DevKit')
+        Write-Host "Extracting DevKit to $devKitPath..." -ForegroundColor Gray
+        7z.exe x $devKitLocalFileName -y -o"$devKitPath" | Out-Null
+
+        # create config.yml
+        $configYamlPath = (Join-Path $devKitPath 'config.yml')
+        New-Item $configYamlPath -ItemType File | Out-Null
+
+        # write yaml file
+        $dk_path = $ruby_pre.replace('\', '/')
+        $yaml = "---`n- $dk_path"
+        $yaml += ($ruby.devkit_sufs -join "`n- $dk_path" | Out-String )
+        Add-Content -Path $configYamlPath -Value $yaml`n
+
+        # install DevKit
+        Write-Host "Installing DevKit..." -ForegroundColor Gray
+        Push-Location $devKitPath
+        ruby.exe dk.rb install
+        Pop-Location
+    }
     # delete temp path
-    if($tempPath) {
-        Write-Host "  Cleaning up..." -ForegroundColor Gray
+    if ($tempPath) {
+        Write-Host "Cleaning up..." -ForegroundColor Gray
         Remove-Item $tempPath -Force -Recurse
     }
 
-    Write-Host "  Done!" -ForegroundColor Green
 }
 
-function Update-Ruby($ruby) {
-    Write-Host "Updating $($ruby.version)" -ForegroundColor Cyan
-
-    $env:Path = "$($ruby.install_path)\bin;$($env:Path)"
-
-    if ($ruby.install_psych) {
-        Write-Host "gem install psych -v 2.2.4" -ForegroundColor Gray
-        cmd /c gem install psych -v 2.2.4
-    } elseif ($ruby.update_psych) {
-        Write-Host "gem update psych" -ForegroundColor Gray
-        cmd /c gem update psych
+# installer for RubyInstaller2 based rubies (vers 2.4 and higher)
+function Install-RI2($ruby, $install_path) {
+    # uninstall existing
+    $rubyUninstallPath = "$install_path\unins000.exe"
+    if([IO.File]::Exists($rubyUninstallPath)) {
+        Write-Host "Uninstalling previous Ruby 2.4..." -ForegroundColor Gray
+        "`"$rubyUninstallPath`" /silent" | out-file "$env:temp\uninstall-ruby.cmd" -Encoding ASCII
+        & "$env:temp\uninstall-ruby.cmd"
+        del "$env:temp\uninstall-ruby.cmd"
+        Start-Sleep -s 5
     }
 
-    Write-Host "gem update --system" -ForegroundColor Gray
-    cmd /c gem update --system
+    if(Test-Path $install_path) {
+        Write-Host "Deleting $install_path" -ForegroundColor Gray
+        Remove-Item $install_path -Force -Recurse
+    }
 
+    $exePath = "$($env:TEMP)\rubyinstaller.exe"
+    $url = $ri2_url + $ruby.download_path
+    Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $ri2_url" -ForegroundColor Gray
+    (New-Object Net.WebClient).DownloadFile($url, $exePath)
+
+    Write-Host "Installing..." -ForegroundColor Gray
+    
+    cmd /c start /wait $exePath /verysilent /dir="$install_path" /tasks="noassocfiles,nomodpath,noridkinstall"
+    del $exePath
+}
+
+function Update-Ruby($ruby, $install_path) {
+    ruby.exe -e "puts STDOUT.external_encoding"
+    $gem_vers = $(gem --version)
+    Write-Host Current RubyGems version is $gem_vers
+    
+    # RubyGems 3 will not support Ruby < 2.2
+    if ($ruby.suffix -lt "22") {
+      Write-Host "gem install rubygems-update --version '~> 2.7'" -ForegroundColor Gray
+      if ($gem_vers -lt '2.0') {
+        gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'
+      } else {
+        gem install rubygems-update -N --version '~> 2.7'  
+      }
+      Push-Location $install_path\bin
+      ruby.exe update_rubygems 1> $null
+      Pop-Location
+    } else {
+      Write-Host "gem update --system" -ForegroundColor Gray
+      gem update --system --no-document -q 1> $null
+    }
+    Write-Host Done Updating to RubyGems (gem --version)`n -ForegroundColor Gray
+
+    if ($ruby.install_psych) {
+        Write-Host "gem install psych -v 2.2.4 -N" -ForegroundColor Gray
+        gem install psych -v 2.2.4 -N
+    } elseif ($ruby.update_psych) {
+        Write-Host "gem update psych -N" -ForegroundColor Gray
+        gem update psych -N
+    }
+
+    Write-Host "gem update minitest rake test-unit -N" -ForegroundColor Gray
+    gem update minitest rake test-unit -N -f
+    
     # cleanup old gems
     Write-Host "gem cleanup" -ForegroundColor Gray
-    cmd /c gem cleanup
-
-    # list installed gems
-    Write-Host "gem list --local" -ForegroundColor Gray
-    cmd /c gem list --local
-
-    # install bundler package
-    Write-Host "gem install bundler --force" -ForegroundColor Gray
-    cmd /c gem install bundler --force
+    gem uninstall rubygems-update -x
+    gem cleanup
 
     # fix "bundler" executable
     Write-Host "fix bundler.bat"
-    Copy-Item -Path "$($ruby.install_path)\bin\bundle" -Destination "$($ruby.install_path)\bin\bundler" -Force
-    Copy-Item -Path "$($ruby.install_path)\bin\bundle.bat" -Destination "$($ruby.install_path)\bin\bundler.bat" -Force
+    Copy-Item -Path "$install_path\bin\bundle"     -Destination "$install_path\bin\bundler"     -Force
+    Copy-Item -Path "$install_path\bin\bundle.bat" -Destination "$install_path\bin\bundler.bat" -Force
 
-    Write-Host "  Done!" -ForegroundColor Green
+    Write-Host "Done!" -ForegroundColor Green
 }
 
-# save current directory
-$currentDir = (pwd).Path
+#———————————————————————————————————————————————————————————————————— Main Loops
 
-for($i = 0; $i -lt $rubies.Count; $i++) {
-    Install-Ruby $rubies[$i]
+# install rubies & devkits
+foreach ($ruby in $rubies_install) { 
+    Write-Host "`n$($dash * 60) Installing $($ruby.version)" -ForegroundColor Cyan
+    $install_path = $ruby_pre + $ruby.suffix
+    $env:Path = "$install_path\bin;$no_ruby_path"
+    if ($ruby.suffix -ge '24') { Install-RI2 -ruby $ruby -install_path $install_path
+                        } else { Install-RI  -ruby $ruby -install_path $install_path
+    }
+    Write-Host "Done!" -ForegroundColor Green
 }
 
-for($i = 0; $i -lt $rubies.Count; $i++) {
-    Update-Ruby $rubies[$i]
+# update rubies
+foreach ($ruby in $rubies_update) { 
+    Write-Host "`n$($dash * 60) Updating $($ruby.version)" -ForegroundColor Cyan
+    $install_path = $ruby_pre + $ruby.suffix
+    $env:Path = "$install_path\bin;$no_ruby_path"
+    Update-Ruby -ruby $ruby -install_path $install_path
 }
 
-# Fix bundler.bat
-# @("Ruby193","Ruby200","Ruby200-x64","Ruby21","Ruby21-x64","Ruby22","Ruby22-x64","Ruby23","Ruby23-x64","Ruby24","Ruby24-x64") | % { Copy-Item "C:\$_\bin\bundle.bat" -Destination "C:\$_\bin\bundler.bat" -Force; Copy-Item "C:\$_\bin\bundle" -Destination "C:\$_\bin\bundler" -Force }
+# reset SSL_CERT_FILE
+if ($SSL_CERT_FILE_EXISTS) { $env:SSL_CERT_FILE = $SSL_CERT_FILE 
+                    } else { Remove-Item env:SSL_CERT_FILE }
 
-# print summary
-for($i = 0; $i -lt $rubies.Count; $i++) {
-    $ruby = $rubies[$i]
-    Write-Host "$($ruby.version)" -ForegroundColor Cyan
-    Write-Host "ruby --version: $(cmd /c "$($ruby.install_path)\bin\ruby" --version)"
-    Write-Host "gem --version: $(cmd /c "$($ruby.install_path)\bin\gem" --version)"
-    Write-Host "bundle --version: $(cmd /c "$($ruby.install_path)\bin\bundle" --version)"
-    Write-Host "bundler --version: $(cmd /c "$($ruby.install_path)\bin\bundler" --version)"
+# install info
+$enc = [Console]::OutputEncoding.HeaderName
+Push-Location $PSScriptRoot
+foreach ($ruby in $rubies_update) {
+    Write-Host "`n$($dash * 60) $($ruby.version) Info" -ForegroundColor Cyan
+    $install_path = $ruby_pre + $ruby.suffix
+    $env:Path = "$install_path\bin;$no_ruby_path"
+    ruby.exe install_ruby_info.rb $enc
 }
+Pop-Location
 
-Add-Path 'C:\Ruby193\bin'
+$env:path = $orig_path
+Write-Host "`n$($dash * 80)`n" -ForegroundColor Cyan
+# Add-Path 'C:\Ruby193\bin'
