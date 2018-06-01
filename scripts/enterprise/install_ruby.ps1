@@ -86,13 +86,13 @@ $r23 = @(
 $r24 = @(
     @{  "version"  = "Ruby 2.4.4-1"
         "suffix" = "24"
-        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x86.exe"
+        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x86.7z"
         "devkit_file" = ""
         "devkit_sufs" = @()
     }
     @{  "version" = "Ruby 2.4.4-1 (x64)"
         "suffix"  = "24-x64"
-        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x64.exe"
+        "download_path" = "rubyinstaller-2.4.4-1/rubyinstaller-2.4.4-1-x64.7z"
         "devkit_file"   = ""
         "devkit_sufs"   = @()
     }
@@ -101,13 +101,13 @@ $r24 = @(
 $r25 = @(
     @{  "version" = "Ruby 2.5.1-1"
         "suffix"  = "25"
-        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x86.exe"
+        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x86.7z"
         "devkit_file"   = ""
         "devkit_sufs"   = @()
     }
     @{  "version" = "Ruby 2.5.1-1 (x64)"
         "suffix"  = "25-x64"
-        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x64.exe"
+        "download_path" = "rubyinstaller-2.5.1-1/rubyinstaller-2.5.1-1-x64.7z"
         "devkit_file"   = ""
         "devkit_sufs"   = @()
     }
@@ -146,32 +146,21 @@ function GetUninstallString($productName) {
         | Select UninstallString).UninstallString
 }
 
-function Get-FileNameFromUrl($url) {
-    $fileName = $url.Trim('/')
-    $idx = $fileName.LastIndexOf('/')
-    if($idx -ne -1) {
-        $fileName = $fileName.substring($idx + 1)
-        $idx = $fileName.IndexOf('?')
-        if($idx -ne -1) {
-            $fileName = $fileName.substring(0, $idx)
-        }
-    }
-    return $fileName
-}
+function Get-FileNameFromUrl($url) { return $url.Trim('/').split('/')[-1] }
 
-# installer for RubyInstaller based rubies  (vers 2.3 and lower)
-function Install-RI($ruby, $install_path) {
+# Install 7z file to $install_path
+function Install-7z($ruby, [string]$install_path, [string]$base_url) {
     # create temp directory for all downloads
     $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
     New-Item $tempPath -ItemType Directory | Out-Null
 
-    $url = $ri_url + $ruby.download_path
-    $distFileName = Get-FileNameFromUrl $url
+    $url = $base_url  + $ruby.download_path
+    $distFileName = Get-FileNameFromUrl $ruby.download_path
     $distName = [IO.Path]::GetFileNameWithoutExtension($distFileName)
     $distLocalFileName = (Join-Path $tempPath $distFileName)
 
     # download archive to a temp
-    Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $ri_url" -ForegroundColor Gray
+    Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $base_url" -ForegroundColor Gray
     (New-Object Net.WebClient).DownloadFile($url, $distLocalFileName)
 
     # extract archive to C:\
@@ -180,12 +169,20 @@ function Install-RI($ruby, $install_path) {
 
     # move
     Move-Item -Path "C:\$distName" -Destination $install_path
+}
+
+# installer for RubyInstaller based rubies  (vers 2.3 and lower)
+function Install-RI($ruby, $install_path) {
+    Install-7z $ruby $install_path $ri_url
 
     # download DevKit
     if ($ruby.devkit_path) {
+        $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+        New-Item $tempPath -ItemType Directory | Out-Null
+
         $url = $ri_url + $ruby.devkit_path
         Write-Host "Downloading DevKit ($($ruby.devkit_path)) from`n            $ri_url" -ForegroundColor Gray
-        $devKitFileName = Get-FileNameFromUrl $url
+        $devKitFileName = Get-FileNameFromUrl $ruby.devkit_path
         $devKitLocalFileName = (Join-Path $tempPath $devKitFileName)
         (New-Object Net.WebClient).DownloadFile($url, $devKitLocalFileName)
 
@@ -230,16 +227,8 @@ function Install-RI2($ruby, $install_path) {
         Start-Sleep -s 5
     }
 
-    $exePath = "$($env:TEMP)\rubyinstaller.exe"
-    $url = $ri2_url + $ruby.download_path
-    Write-Host "Downloading $($ruby.version)  ($($ruby.download_path)) from`n            $ri2_url" -ForegroundColor Gray
-    (New-Object Net.WebClient).DownloadFile($url, $exePath)
+    Install-7z $ruby $install_path $ri2_url
 
-    Write-Host "Installing..." -ForegroundColor Gray
-    
-    cmd /c start /wait $exePath /verysilent /dir="$install_path" /tasks="noassocfiles,nomodpath,noridkinstall"
-    del $exePath
-    
     # delete html docs
     if (Test-Path $install_path\share\doc\ruby\html) {
         Write-Host "Deleting docs at $install_path\share\doc\ruby\html..." -ForegroundColor Gray
@@ -252,19 +241,21 @@ function Update-Ruby($ruby, $install_path) {
     Write-Host Current RubyGems version is $gem_vers
     
     # RubyGems 3 will not support Ruby < 2.2
+    # RubyGems < 2 takes different arguments
     if ($ruby.suffix -lt "22") {
-      Write-Host "gem install rubygems-update --version '~> 2.7'" -ForegroundColor Gray
       if ($gem_vers -lt '2.0') {
+        Write-Host "gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'" -ForegroundColor Gray
         gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'
       } else {
+        Write-Host "gem install rubygems-update -N --version '~> 2.7'" -ForegroundColor Gray
         gem install rubygems-update -N --version '~> 2.7'  
       }
       Push-Location $install_path\bin
       ruby.exe update_rubygems 1> $null
       Pop-Location
     } else {
-      Write-Host "gem update --system" -ForegroundColor Gray
-      gem update --system --no-document -q 1> $null
+      Write-Host "gem update --system -N" -ForegroundColor Gray
+      gem update --system -N -q 1> $null
     }
     Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
 
@@ -276,16 +267,16 @@ function Update-Ruby($ruby, $install_path) {
         gem update psych -N
     }
 
-    Write-Host "gem update minitest rake test-unit -N" -ForegroundColor Gray
+    Write-Host "`ngem update minitest rake test-unit -N" -ForegroundColor Gray
     gem update minitest rake test-unit -N -f
     
     # cleanup old gems
-    Write-Host "gem cleanup" -ForegroundColor Gray
+    Write-Host "`ngem cleanup" -ForegroundColor Gray
     gem uninstall rubygems-update -x
     gem cleanup
 
     # fix "bundler" executable
-    Write-Host "fix bundler.bat"
+    Write-Host "add bin\bundler & bin\bundler.bat"
     Copy-Item -Path "$install_path\bin\bundle"     -Destination "$install_path\bin\bundler"     -Force
     Copy-Item -Path "$install_path\bin\bundle.bat" -Destination "$install_path\bin\bundler.bat" -Force
 
