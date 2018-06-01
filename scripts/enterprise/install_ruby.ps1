@@ -9,9 +9,9 @@ Initial code by FeodorFitsner and MSP-Greg
 #———————————————————————————————————————————————————————— Install & Version Info
 
 # Path prefix for rubies
-$ruby_pre = 'C:\AV'
+$ruby_pre = 'C:\'
 if( !(Test-Path -Path $ruby_pre) ) { New-Item -Path $ruby_pre -ItemType Directory 1> $null }
-$ruby_pre += '\Ruby'
+$ruby_pre = $ruby_pre.Trim('\') + '\Ruby'
 
 # url for RubyInstaller  (vers 2.3 and lower)
 $ri_url  = "https://dl.bintray.com/oneclick/rubyinstaller/"
@@ -245,30 +245,40 @@ function Install-RI2($ruby, [string]$install_path) {
 function Update-Ruby($ruby, $install_path) {
     $gem_vers = $(gem --version)
     Write-Host Current RubyGems version is $gem_vers
-    
+   
     # RubyGems 3 will not support Ruby < 2.2
     # RubyGems < 2 takes different arguments
     if ($ruby.suffix -lt "22") {
-      if ($gem_vers -lt '2.0') {
-        Write-Host "gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'" -ForegroundColor Gray
-        gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'
+      if ($(gem query -r rubygems-update -v '~> 2.7').Contains($gem_vers)) {
+        Write-Host "RubyGems is up to date" -ForegroundColor Gray
       } else {
-        Write-Host "gem install rubygems-update -N --version '~> 2.7'" -ForegroundColor Gray
-        gem install rubygems-update -N --version '~> 2.7'  
+        if ($gem_vers -lt '2.0') {
+          Write-Host "gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'" -ForegroundColor Gray
+          gem install rubygems-update --no-rdoc --no-ri --version '~> 2.7'
+        } else {
+          Write-Host "gem install rubygems-update -N --version '~> 2.7'" -ForegroundColor Gray
+          gem install rubygems-update -N --version '~> 2.7'  
+        }
+        Push-Location $install_path\bin
+        ruby.exe update_rubygems 1> $null
+        Pop-Location
+        Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
       }
-      Push-Location $install_path\bin
-      ruby.exe update_rubygems 1> $null
-      Pop-Location
     } else {
-      Write-Host "gem update --system -N" -ForegroundColor Gray
-      gem update --system -N -q 1> $null
+      if ($(gem query rubygems-update -r).Contains($gem_vers)) {
+        Write-Host "RubyGems is up to date" -ForegroundColor Gray
+      } else {
+        Write-Host "gem update --system -N" -ForegroundColor Gray
+        gem update --system -N -q 1> $null
+        Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
+      }
     }
-    Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
-
     
     if ($ruby.suffix -lt '21') {
-      Write-Host "`ngem install psych -N -v '~> 2.2'" -ForegroundColor Gray
-      gem install psych -N -v '~> 2.2'
+      if ( $(gem query psych -i -v '2.2.4') -eq $False) {
+        Write-Host "`ngem install psych -N -v '~> 2.2'" -ForegroundColor Gray
+        gem install psych -N -v '~> 2.2'
+      }
     }
 
     Write-Host "`ngem update minitest rake test-unit -N -f" -ForegroundColor Gray
@@ -276,7 +286,7 @@ function Update-Ruby($ruby, $install_path) {
     
     # cleanup old gems
     Write-Host "`ngem cleanup" -ForegroundColor Gray
-    gem uninstall rubygems-update -x
+    if ( $(gem query -i rubygems-update) -eq $True ) { gem uninstall rubygems-update -x }
     gem cleanup
 
     # cleanup - allow for particular issues in versions
@@ -284,15 +294,21 @@ function Update-Ruby($ruby, $install_path) {
     {
       '23' {
         # fix odd quirk with 23 not uninstalling old rake
-        if (gem query rake -i -v '10.4.2') { gem uninstall rake -x -v '10.4.2' }
+        if ( $(gem query rake -i -v '10.4.2') -eq $True) {
+          gem uninstall rake -x -v '10.4.2'
+        }
       }
     }
 
     # fix "bundler" executable
-    Write-Host "add bin\bundler & bin\bundler.bat"
-    Copy-Item -Path "$install_path\bin\bundle"     -Destination "$install_path\bin\bundler"     -Force
-    Copy-Item -Path "$install_path\bin\bundle.bat" -Destination "$install_path\bin\bundler.bat" -Force
-
+    Push-Location $install_path\bin
+    if ( !( (Test-Path -Path .\bundler) -and (Test-Path -Path .\bundler.bat) ) ) {
+      Write-Host "add bin\bundler & bin\bundler.bat"
+      Copy-Item -Path .\bundle     -Destination .\bundler     -Force
+      Copy-Item -Path .\bundle.bat -Destination .\bundler.bat -Force
+    }
+    Pop-Location
+    
     Write-Host "Done!" -ForegroundColor Green
 }
 
@@ -315,6 +331,7 @@ foreach ($ruby in $rubies_install) {
     }
     Write-Host "Done!" -ForegroundColor Green
 }
+
 
 #————————————————————————————————————————————————————————————————— update rubies
 foreach ($ruby in $rubies_update) { 
