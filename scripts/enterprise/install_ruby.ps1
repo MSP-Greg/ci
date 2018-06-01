@@ -335,6 +335,10 @@ foreach ($ruby in $rubies_update) {
 }
 Pop-Location
 
+Write-Host "`n$($dash * 8) Encoding $($dash * 8)" -ForegroundColor Cyan
+Write-Host "PS Console  $enc"
+iex "ruby.exe -e `"['external','filesystem','internal','locale'].each { |e| puts e.ljust(12) + Encoding.find(e).to_s }`""
+
 $env:path = $orig_path
 Write-Host "`n$($dash * 80)`n" -ForegroundColor Cyan
 # Add-Path 'C:\Ruby193\bin'
