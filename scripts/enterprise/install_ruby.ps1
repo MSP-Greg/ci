@@ -9,10 +9,9 @@ Initial code by FeodorFitsner and MSP-Greg
 #———————————————————————————————————————————————————————— Install & Version Info
 
 # Path prefix for rubies
-$ruby_pre = 'C:\AV\'
-# make sure it exists - omit at root of drive...
+$ruby_pre = 'C:\AV'
 if( !(Test-Path -Path $ruby_pre) ) { New-Item -Path $ruby_pre -ItemType Directory 1> $null }
-$ruby_pre += 'Ruby'
+$ruby_pre += '\Ruby'
 
 # url for RubyInstaller  (vers 2.3 and lower)
 $ri_url  = "https://dl.bintray.com/oneclick/rubyinstaller/"
@@ -325,19 +324,22 @@ foreach ($ruby in $rubies_update) {
     Update-Ruby -ruby $ruby -install_path $install_path
 }
 
-# install info
+#——————————————————————————————————————————————————————————————————— output info
+$([Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(1252)) 2> $null
 $enc = [Console]::OutputEncoding.HeaderName
 Push-Location $PSScriptRoot
 foreach ($ruby in $rubies_update) {
     Write-Host "`n$($dash * 60) $($ruby.version) Info" -ForegroundColor Cyan
     $install_path = $ruby_pre + $ruby.suffix
-    $env:Path = "$install_path\bin;$no_ruby_path"
+    $env:path = "$install_path\bin;$no_ruby_path"
     ruby.exe install_ruby_info.rb $enc
 }
 Pop-Location
 
+# encoding info
 Write-Host "`n$($dash * 8) Encoding $($dash * 8)" -ForegroundColor Cyan
-Write-Host "PS Console  $enc"
+Write-Host "PS Console  $([Console]::OutputEncoding.HeaderName)"
+Write-Host "PS Output   $($OutputEncoding.HeaderName)"
 iex "ruby.exe -e `"['external','filesystem','internal','locale'].each { |e| puts e.ljust(12) + Encoding.find(e).to_s }`""
 
 # reset SSL_CERT_FILE
