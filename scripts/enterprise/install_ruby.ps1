@@ -2,8 +2,6 @@
 Installs, updates, and logs info for ruby versions
 
 $rubies_install and $rubies_update variables define versions processed
-
-Updates: RubyGems, bundler, minitest, rake, test-unit
   
 Initial code by FeodorFitsner and MSP-Greg
 #>
@@ -28,7 +26,6 @@ $r19 = @(
         "download_path" = "ruby-1.9.3-p551-i386-mingw32.7z"
         "devkit_path"   = "DevKit-tdm-32-4.5.2-20111229-1559-sfx.exe"
         "devkit_sufs"   = @("193")
-        "install_psych" = "true"
     }
 )    
 
@@ -36,12 +33,10 @@ $r20 = @(
     @{  "version" = "Ruby 2.0.0-p648"
         "suffix"  = "200"
         "download_path" = "ruby-2.0.0-p648-i386-mingw32.7z"
-        "install_psych" = "true"
     }
     @{  "version" = "Ruby 2.0.0-p648 (x64)"
         "suffix"  = "200-x64"
         "download_path" = "ruby-2.0.0-p648-x64-mingw32.7z"
-        "install_psych" = "true"
     }
 )
 
@@ -138,7 +133,7 @@ $orig_path = $env:path
 # hopefully, a ruby free path
 $no_ruby_path = $env:path -ireplace "[^;]+?ruby[^;]+?bin;", ''
 
-function GetUninstallString($productName) {
+function GetUninstallString([string]$productName) {
     $x64items = @(Get-ChildItem "HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
     ($x64items + @(Get-ChildItem "HKLM:SOFTWARE\wow6432node\Microsoft\Windows\CurrentVersion\Uninstall") `
         | ForEach-object { Get-ItemProperty Microsoft.PowerShell.Core\Registry::$_ } `
@@ -146,9 +141,11 @@ function GetUninstallString($productName) {
         | Select UninstallString).UninstallString
 }
 
-function Get-FileNameFromUrl($url) { return $url.Trim('/').split('/')[-1] }
+function Get-FileNameFromUrl([string]$url) { return $url.Trim('/').split('/')[-1] }
 
-# Install 7z file to $install_path
+#———————————————————————————————————————————————————————————————————— Install-7z
+# Install 7z file to $install_path, cleans up
+#
 function Install-7z($ruby, [string]$install_path, [string]$base_url) {
     # create temp directory for all downloads
     $tempPath = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
@@ -171,8 +168,11 @@ function Install-7z($ruby, [string]$install_path, [string]$base_url) {
     Move-Item -Path "C:\$distName" -Destination $install_path
 }
 
+#———————————————————————————————————————————————————————————————————— Install-RI
 # installer for RubyInstaller based rubies  (vers 2.3 and lower)
-function Install-RI($ruby, $install_path) {
+# installs from 7z file, adds DevKit as defined in $rubies_install
+#
+function Install-RI($ruby, [string]$install_path) {
     Install-7z $ruby $install_path $ri_url
 
     # download DevKit
@@ -212,11 +212,13 @@ function Install-RI($ruby, $install_path) {
         Write-Host "Cleaning up..." -ForegroundColor Gray
         Remove-Item $tempPath -Force -Recurse
     }
-
 }
 
+#——————————————————————————————————————————————————————————————————— Install-RI2
 # installer for RubyInstaller2 based rubies (vers 2.4 and higher)
-function Install-RI2($ruby, $install_path) {
+# installs from 7z file, removes all html doc files
+#
+function Install-RI2($ruby, [string]$install_path) {
     # uninstall existing
     $rubyUninstallPath = "$install_path\unins000.exe"
     if([IO.File]::Exists($rubyUninstallPath)) {
@@ -236,6 +238,11 @@ function Install-RI2($ruby, $install_path) {
     }
 }
 
+#——————————————————————————————————————————————————————————————————— Update-Ruby
+# updates RubyGems & Bundler, minitest rake test-unit
+# updates psych for Ruby < 2.2
+# cleans up old gems
+#
 function Update-Ruby($ruby, $install_path) {
     $gem_vers = $(gem --version)
     Write-Host Current RubyGems version is $gem_vers
@@ -259,21 +266,28 @@ function Update-Ruby($ruby, $install_path) {
     }
     Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
 
-    if ($ruby.install_psych) {
-        Write-Host "gem install psych -v 2.2.4 -N" -ForegroundColor Gray
-        gem install psych -v 2.2.4 -N
-    } elseif ($ruby.update_psych) {
-        Write-Host "gem update psych -N" -ForegroundColor Gray
-        gem update psych -N
+    
+    if ($ruby.suffix -lt '22') {
+      Write-Host "`ngem install psych -N -v '~> 2.2'" -ForegroundColor Gray
+      gem install psych -N -v '~> 2.2'
     }
 
-    Write-Host "`ngem update minitest rake test-unit -N" -ForegroundColor Gray
+    Write-Host "`ngem update minitest rake test-unit -N -f" -ForegroundColor Gray
     gem update minitest rake test-unit -N -f
     
     # cleanup old gems
     Write-Host "`ngem cleanup" -ForegroundColor Gray
     gem uninstall rubygems-update -x
     gem cleanup
+
+    # cleanup - allow for particular issues in versions
+    switch ( $ruby.suffix.Substring(0,2) )
+    {
+      '23' {
+        # fix odd quirk with 23 not uninstalling old rake
+        if (gem query rake -i -v '10.4.2') { gem uninstall rake -x -v '10.4.2' }
+      }
+    }
 
     # fix "bundler" executable
     Write-Host "add bin\bundler & bin\bundler.bat"
@@ -285,7 +299,7 @@ function Update-Ruby($ruby, $install_path) {
 
 #———————————————————————————————————————————————————————————————————— Main Loops
 
-# install rubies & devkits
+#—————————————————————————————————————————————————————— install rubies & devkits
 foreach ($ruby in $rubies_install) { 
     Write-Host "`n$($dash * 60) Installing $($ruby.version)" -ForegroundColor Cyan
     $install_path = $ruby_pre + $ruby.suffix
@@ -303,17 +317,13 @@ foreach ($ruby in $rubies_install) {
     Write-Host "Done!" -ForegroundColor Green
 }
 
-# update rubies
+#————————————————————————————————————————————————————————————————— update rubies
 foreach ($ruby in $rubies_update) { 
     Write-Host "`n$($dash * 60) Updating $($ruby.version)" -ForegroundColor Cyan
     $install_path = $ruby_pre + $ruby.suffix
     $env:path = "$install_path\bin;$no_ruby_path"
     Update-Ruby -ruby $ruby -install_path $install_path
 }
-
-# reset SSL_CERT_FILE
-if ($SSL_CERT_FILE_EXISTS) { $env:SSL_CERT_FILE = $SSL_CERT_FILE 
-                    } else { Remove-Item env:SSL_CERT_FILE }
 
 # install info
 $enc = [Console]::OutputEncoding.HeaderName
@@ -329,6 +339,10 @@ Pop-Location
 Write-Host "`n$($dash * 8) Encoding $($dash * 8)" -ForegroundColor Cyan
 Write-Host "PS Console  $enc"
 iex "ruby.exe -e `"['external','filesystem','internal','locale'].each { |e| puts e.ljust(12) + Encoding.find(e).to_s }`""
+
+# reset SSL_CERT_FILE
+if ($SSL_CERT_FILE_EXISTS) { $env:SSL_CERT_FILE = $SSL_CERT_FILE 
+                    } else { Remove-Item env:SSL_CERT_FILE }
 
 $env:path = $orig_path
 Write-Host "`n$($dash * 80)`n" -ForegroundColor Cyan
