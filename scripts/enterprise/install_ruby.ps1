@@ -267,7 +267,7 @@ function Update-Ruby($ruby, $install_path) {
     Write-Host Done Updating to RubyGems (gem --version) -ForegroundColor Gray
 
     
-    if ($ruby.suffix -lt '22') {
+    if ($ruby.suffix -lt '21') {
       Write-Host "`ngem install psych -N -v '~> 2.2'" -ForegroundColor Gray
       gem install psych -N -v '~> 2.2'
     }
